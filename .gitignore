@@ -1,0 +1,43 @@
+
+# 1. RUNTIME DATA
+new/
+tmp/
+per/
+cmp/
+processing/
+failed/
+*.bin
+*.download
+*.file
+*.dat
+
+# 2. C++ & CMAKE BUILD FILES
+build/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+*.o
+*.out
+*.so
+*.a
+# FILE
+downloader_service 
+
+# 3. PYTHON & FLASK (API WEB SERVICE)
+__pycache__/
+*.py[cod]
+*$py.class
+# Virtual Environments
+venv/
+.venv/
+env/
+
+#IMPORTANT (IF HAVE)
+.env
+
+# 4. IDE & OPERATING SYSTEM
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
