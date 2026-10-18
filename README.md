@@ -29,10 +29,10 @@ The service is designed to run behind a web frontend (e.g., Flask). The two side
 ## System Design
 
 ### Pipeline
-![Pipeline](https://github.com/dgeniust/BOSCH_downloader_cplus2/blob/main/downloader_cplus2_pipeline.png?raw=true)
+![Pipeline](https://github.com/dgeniust/BOSCH_downloader_cplus2/blob/main/img/downloader_cplus2_pipeline.png?raw=true)
 
 ### Detail Components And Operating Principles
-![Detail Components](https://github.com/dgeniust/BOSCH_downloader_cplus2/blob/main/downloader_cplus2_detail_compos.png?raw=true)
+![Detail Components](https://github.com/dgeniust/BOSCH_downloader_cplus2/blob/main/img/downloader_cplus2_detail_compos.png?raw=true)
 
 ---
 
