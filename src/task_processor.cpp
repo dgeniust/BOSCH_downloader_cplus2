@@ -33,7 +33,7 @@ void TaskProcessor::processTask(const std::string& json_filepath){
             std::string url = url_element.get<std::string>();
 
             if(cache.isDownloaded(url)){
-                std::cout<<"Skipping dupplicate" << url << "\n";
+                std::cout<<"Skipping dupplicate: " << url << "\n";
                 continue;
             }
 
@@ -41,7 +41,7 @@ void TaskProcessor::processTask(const std::string& json_filepath){
             std::string tmp_path = "./tmp/" + file_uuid + ".download";
             std::string final_path = "./per/" + file_uuid + ".file";
 
-            std::cout << "Starting download" << url << "\n";
+            std::cout << "Starting download: " << url << "\n";
 
             if(Downloader::downloadFile(url, tmp_path)){
                 fs::rename(tmp_path, final_path);

@@ -13,7 +13,7 @@ Monitor::Monitor() : fd(-1), wd(-1) {}
 
 Monitor::~Monitor() {
     if(fd >= 0 && wd >= 0) {
-        inotify_rm_watch(fd, wd); // Xóa theo dõi[cite: 2]
+        inotify_rm_watch(fd, wd); // Xóa theo dõi
         close(fd);
     }
 }
@@ -28,20 +28,20 @@ void* Monitor::monitorLoop (void* arg) {
     char buffer[EVENT_BUF_LEN];
 
     while(true) {
-        int length = read(self->fd, buffer, EVENT_BUF_LEN); // Đọc event[cite: 2]
+        int length = read(self->fd, buffer, EVENT_BUF_LEN); // Đọc event
         if(length < 0) break;
 
         int i = 0;
         while(i < length) {
             struct inotify_event* event = (struct inotify_event*)&buffer[i];
-            if(event->len && (event->mask & IN_MOVED_TO)) { // Check IN_MOVED_TO[cite: 2]
+            if(event->len && (event->mask & IN_MOVED_TO)) { // Check IN_MOVED_TO
                 std::string filename = event->name;
 
                 if(filename.length() > 5 && filename.substr(filename.length() - 5) == ".json") {
                     std::string full_path = "/new/" + filename;
                     
                     // Tạo thread độc lập để xử lý
-                    std::thread(TaskProcessor::processTask, full_path).detach(); // Gọi TaskProcessor[cite: 2]
+                    std::thread(TaskProcessor::processTask, full_path).detach(); // Gọi TaskProcessor
                 }
             }
             i += EVENT_SIZE + event->len;
@@ -57,7 +57,7 @@ void Monitor::start(const std::string& watch_dir) {
         return;
     }
 
-    wd = inotify_add_watch(fd, watch_dir.c_str(), IN_MOVED_TO); // Bắt đầu theo dõi[cite: 2]
+    wd = inotify_add_watch(fd, watch_dir.c_str(), IN_MOVED_TO); // Bắt đầu theo dõi
     
     pthread_t threadId;
     pthread_create(&threadId, nullptr, &Monitor::monitorLoop, this);

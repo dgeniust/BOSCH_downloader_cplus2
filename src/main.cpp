@@ -7,7 +7,6 @@
 namespace fs = std::filesystem;
 
 int main() {
-    // Sửa lỗi: Thêm tạo thư mục "/new" và xóa dòng lặp lại "/tmp"
     fs::create_directories("/new");
     fs::create_directories("/tmp");
     fs::create_directories("/per");

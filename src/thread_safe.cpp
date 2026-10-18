@@ -15,7 +15,7 @@ void DeduplicationCache::markDownloaded(const std::string& url){
     downloaded_urls.insert(url);
 }
 std::string generateUUID(){
-    uuid_t uuid;;
+    uuid_t uuid;
     uuid_generate(uuid);
     char uuid_str[37];
     uuid_unparse_lower(uuid, uuid_str);
