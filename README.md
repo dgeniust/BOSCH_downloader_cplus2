@@ -16,12 +16,25 @@ The service is designed to run behind a web frontend (e.g., Flask). The two side
 
 ## Table of Contents
 
+- [System Design](#system-design)
 - [Key Features](#key-features)
 - [Architecture](#architecture)
 - [Technology Stack](#technology-stack)
 - [Getting Started](#getting-started)
 - [Testing the Pipeline](#testing-the-pipeline)
 - [API & Function Reference](#api--function-reference)
+
+---
+
+## System Design
+
+### Pipeline
+![Pipeline](https://github.com/dgeniust/BOSCH_downloader_cplus2/blob/main/downloader_cplus2_pipeline.png?raw=true)
+
+### Detail Components And Operating Principles
+![Detail Components](https://github.com/dgeniust/BOSCH_downloader_cplus2/blob/main/downloader_cplus2_detail_compos.png?raw=true)
+
+---
 
 ---
 
