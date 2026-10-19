@@ -38,7 +38,7 @@ void* Monitor::monitorLoop (void* arg) {
                 std::string filename = event->name;
 
                 if(filename.length() > 5 && filename.substr(filename.length() - 5) == ".json") {
-                    std::string full_path = "/new/" + filename;
+                    std::string full_path = "new/" + filename;
                     
                     // Tạo thread độc lập để xử lý
                     std::thread(TaskProcessor::processTask, full_path).detach(); // Gọi TaskProcessor

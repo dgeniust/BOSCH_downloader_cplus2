@@ -7,14 +7,14 @@
 namespace fs = std::filesystem;
 
 int main() {
-    fs::create_directories("/new");
-    fs::create_directories("/tmp");
-    fs::create_directories("/per");
-    fs::create_directories("/cmp");
+    fs::create_directories("new");
+    fs::create_directories("tmp");
+    fs::create_directories("per");
+    fs::create_directories("cmp");
 
     curl_global_init(CURL_GLOBAL_ALL);
 
-    Monitor::getInstance().start("/new");
+    Monitor::getInstance().start("new");
 
     while(true){
         std::this_thread::sleep_for(std::chrono::hours(1));
