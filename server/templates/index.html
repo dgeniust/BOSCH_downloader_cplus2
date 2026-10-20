@@ -59,7 +59,6 @@
     </div>
 
     <script>
-        // Mảng chứa các object: { url: "...", selected: true/false }
         let urlsArray = [];
         let toastTimeout;
         const inputEl = document.getElementById('urlInput');
@@ -81,10 +80,8 @@
 
             lines.forEach(item => {
                 const cleanUrl = item.trim();
-                // Kiểm tra không rỗng và chưa tồn tại trong mảng
-                const exists = urlsArray.some(u => u.url === cleanUrl);
-                if (cleanUrl.length > 0 && !exists) {
-                    urlsArray.push({ url: cleanUrl, selected: true }); // Mặc định được chọn
+                if (cleanUrl.length > 0) {
+                    urlsArray.push({ url: cleanUrl, selected: true }); 
                 }
             });
 
@@ -102,7 +99,6 @@
             urlsArray.forEach((item, index) => {
                 const li = document.createElement('li');
                 
-                // Tạo Checkbox
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.className = 'checkbox-link';
@@ -129,7 +125,6 @@
         }
 
         function submitUrls() {
-            // Chỉ lấy các URL có trạng thái selected là true
             const selectedUrls = urlsArray.filter(item => item.selected).map(item => item.url);
 
             if (selectedUrls.length === 0) {
@@ -147,10 +142,9 @@
             .then(response => response.json())
             .then(data => {
                 if(data.success) {
-                    showToast(`Thành công! Flask đã nhận link.`, "success");
-
-                    urlsArray = urlsArray.filter(item => !item.selected);
-                    renderList();
+                    showToast(`Thành công! Flask đã nhận ${data.added_count} link.`, "success");
+                    // urlsArray = urlsArray.filter(item => !item.selected);
+                    // renderList();
                 } else {
                     showToast("Lỗi: " + data.error, "error");
                 }

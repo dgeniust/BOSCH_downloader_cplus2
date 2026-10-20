@@ -25,9 +25,33 @@ cmake_install.cmake
 downloader_service 
 
 # 3. PYTHON & FLASK (API WEB SERVICE)
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+downloader-py/
+*.pyc
+# Môi trường ảo (Virtual Environments)
+venv/
+.venv/
+env/
+group1env_venv/
+*env*/
+
+# Flask runtime / config
+instance/
+.webassets-cache
+.env
+.flaskenv
+
+# Log files
+*.log
+
+# Dữ liệu động sinh ra khi chạy ứng dụng (Runtime Data)
+server/downloads.json
+server/data/*.json
+*.sock
+server/downloader-py/
 # Virtual Environments
 venv/
 .venv/

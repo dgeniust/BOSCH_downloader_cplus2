@@ -57,7 +57,7 @@ def background_maintenance():
 
     current_time = time.time()
     expired_jobs = [
-      j_id for j_id, j_info in JOBS.items()
+      j_id for j_id, j_info in list(JOBS.items())
       if current_time - j_info.get('create_at', current_time) > JOB_EXPIRE_TIME
     ]
     for j_id in expired_jobs:
@@ -69,16 +69,34 @@ atexit.register(save_history)
 
 def process_urls_background(job_id, url_list):
   JOBS[job_id]['status'] = 'Processing'
-  
-  if url_list:
-      job_file_path = os.path.join(NEW_FOLDER, f"{job_id}.json")
-      with open(job_file_path, 'w', encoding='utf-8') as f:
-          json.dump({"urls": url_list}, f, indent=4, ensure_ascii=False)
+  saved_count = 0
+
+  for url in url_list:
+     clean_url = url.strip()
+     if not clean_url:
+        continue
+
+  epoch_ms = int(time.time() * 1000)
+  short_uuid = uuid.uuid4().hex[:8]
+  item_id = f"{epoch_ms}-{short_uuid}"
+
+  job_data = {
+     "id": item_id,
+     "url": clean_url,
+     "created_ms": epoch_ms
+  }
+  tmp_file_path = os.path.join(NEW_FOLDER, f"{item_id}.tmp")
+  final_file_path = os.path.join(NEW_FOLDER, f"{item_id}.json")
+
+  with open(tmp_file_path, 'w', encoding='utf-8') as f:
+    json.dump(job_data, f, indent=4, ensure_ascii=False)
+
+  os.rename(tmp_file_path, final_file_path)
+  saved_count += 1
 
   JOBS[job_id]['status'] = 'Completed'
   JOBS[job_id]['result'] = {
-      "saved_to_json": len(url_list),
-      "saved_file": f"{job_id}.json" if url_list else None
+        "saved_to_json": saved_count
   }
   
 @app.route('/', methods=['GET'])
@@ -129,42 +147,25 @@ def process_list():
       400:
         description: Lỗi do danh sách URL trống
     """
-    global history_dirty
     data = request.get_json()
     url_list = data.get('urls', [])
     
     if not url_list:
         return jsonify({"success": False, "error": "Danh sách URL trống"}), 400
 
-    new_urls = []
-    with HISTORY_LOCK:
-      for url in url_list:
-        clean_url = url.strip().rstrip('/')
-        if clean_url and (clean_url not in url_history_set):
-            new_urls.append(clean_url)
-            url_history_set.add(clean_url)
-      if new_urls:
-        history_dirty = True
-
-    if not new_urls:
-      return jsonify({
-          "success": True,
-          "message": "Tất cả các URL gửi lên đều đã tồn tại trong hệ thống, không có file mới được tạo.",
-          "added_count": 0
-      }), 200 
     job_id = str(uuid.uuid4())
     JOBS[job_id] = {
         'status': 'Pending',
         'total_urls': len(url_list),
         'created_at': time.time()
     }
-    threading.Thread(target=process_urls_background, args=(job_id, new_urls)).start()
-    
+    threading.Thread(target=process_urls_background, args=(job_id, url_list)).start()
+
     return jsonify({
         "success": True, 
         "job_id": job_id,
-        "message": f"Đã nhận {len(new_urls)} link mới.",
-        "added_count": len(new_urls)
+        "message": f"Đã nhận {len(url_list)} link mới.",
+        "added_count": len(url_list)
     }), 202
 
 @app.route('/api/job-status/<job_id>', methods=['GET'])
