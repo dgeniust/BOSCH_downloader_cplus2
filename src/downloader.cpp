@@ -1,10 +1,10 @@
+#include <iostream>
 #include "downloader.hpp"
 #include <fcntl.h>
 #include <curl/curl.h>
 #include <unistd.h>
 #include <thread>
 #include <vector>
-
 struct ChunkData {
     int file_descriptor;
     off_t current_offset;
@@ -16,6 +16,7 @@ double Downloader::getFileSize(const std::string& url){
     if(curl){
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+        curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
         if(curl_easy_perform(curl) == CURLE_OK){
             curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &file_size);
         }
@@ -46,6 +47,7 @@ void Downloader::downloadChunk(const std::string& url, int fd, off_t start, off_
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
         curl_easy_setopt(curl, CURLOPT_RANGE, range.c_str());
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &chunkInfo);
+        curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
 
         curl_easy_perform(curl);
         curl_easy_cleanup(curl);
@@ -54,12 +56,19 @@ void Downloader::downloadChunk(const std::string& url, int fd, off_t start, off_
 
 bool Downloader::downloadFile(const std::string& url, const std::string& output_path, int num_threads){
     double file_size = getFileSize(url);
-    if(file_size <=0) return false;
+    if(file_size <=0) {
+        std::cerr << "Failed to get file size or file is empty: " << url << "\n";
+        return false;
+    }
 
-    int fd = open(output_path.c_str(), O_CREAT | O_WRONLY, 0666);
-    if(fd < 0) return false;
+    int fd = open(output_path.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0666);
+    if(fd < 0) {
+        std::cerr << "Failed to open output file: " << output_path << "\n";
+        return false;
+    }
 
-    if(fallocate(fd, 0, 0, (off_t)file_size) != 0){
+    if(fallocate(fd, 0, 0, (off_t)file_size) != 0){        
+        std::cerr << "Failed to pre-allocate disk space. \n";
         close(fd);
         return false;
     }

@@ -7,10 +7,11 @@
 namespace fs = std::filesystem;
 
 int main() {
-    fs::create_directories("new");
-    fs::create_directories("tmp");
-    fs::create_directories("per");
-    fs::create_directories("cmp");
+    std::error_code ec;
+    fs::create_directories("./new", ec);
+    fs::create_directories("./tmp", ec);
+    fs::create_directories("./per", ec);
+    fs::create_directories("./cmp", ec);
 
     curl_global_init(CURL_GLOBAL_ALL);
 

@@ -1,10 +1,12 @@
 #pragma once
 #include <string>
+#include <pthread.h>
 
 class Monitor {
 private: 
     int fd;
     int wd;
+    pthread_t monitorThread;
 
     Monitor();
     ~Monitor();
