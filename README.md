@@ -34,6 +34,8 @@ The service is designed to run behind a web frontend (e.g., Flask). The two side
 ### Detail Components And Operating Principles
 ![Detail Components](https://github.com/dgeniust/BOSCH_downloader_cplus2/blob/main/img/downloader_cplus2_detail_compos.png?raw=true)
 
+### Python Service
+![Python Service](https://github.com/dgeniust/BOSCH_downloader_cplus2/blob/main/downloader_cplus2_python_service.png?raw=true)
 ---
 
 ---
