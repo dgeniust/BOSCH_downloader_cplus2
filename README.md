@@ -45,11 +45,12 @@ The service is designed to run behind a web frontend (e.g., Flask). The two side
 | **Event-driven intake** | Uses `inotify` instead of polling to detect new tasks instantly. |
 | **Atomic handoff** | Task files are consumed only on `IN_MOVED_TO`, so a half-written JSON is never read. |
 | **Deduplication** | A thread-safe in-memory cache skips previously downloaded URLs, with size limits / LRU eviction to bound RAM usage. |
-| **Disk pre-allocation** | `fallocate()` reserves space up front to reduce fragmentation, with a fallback for filesystems that do not support it. |
+| **Disk pre-allocation** | `fallocate()` reserves space up front to reduce fragmentation, coupled with `O_TRUNC` to guarantee file integrity. |
 | **Parallel range downloads** | Files are split into byte ranges and fetched by `N` threads via `libcurl`. |
 | **Zero-merge writes** | Each thread writes directly to its offset using `pwrite()`; no temporary chunks to merge. |
-| **Safe fallback** | If the server does not support byte ranges, the download automatically uses a single thread. |
-| **Failure handling** | Exception handling and cleanup of incomplete files in `./tmp` on network interruptions. |
+| **Crash-Proof Multithreading** | Utilizes `CURLOPT_NOSIGNAL` to prevent fatal `SIGALRM`/`SIGPIPE` signals during DNS timeouts across concurrent threads. |
+| **Robust Exception Handling** | Encapsulated `try-catch` blocks prevent detached threads from terminating the main service. Corrupted JSONs are safely archived as `.err` files. |
+| **Memory & Thread Safety** | Proper OS thread lifecycle management (`pthread_cancel`, `pthread_join`) prevents resource leakage. |
 
 ---
 
@@ -64,17 +65,17 @@ The system behaves like a state machine, where each folder represents a stage:
 | `./new` | **Intake.** The web server atomically moves `.json` task files here. |
 | `./tmp` | **Staging.** Files are pre-allocated and downloaded concurrently here. |
 | `./per` | **Permanent storage.** Completed downloads are moved here. |
-| `./cmp` | **Archive.** Completed `.json` task files are moved here for logging. |
+| `./cmp` | **Archive.** Completed `.json` task files (and `.err` corrupted tasks) are moved here for logging. |
 
 ### Processing Flow
 
 1. **Handoff.** The web API receives a request, writes a JSON file containing the URLs to a temporary location, and moves it into `./new/` with an atomic `rename()`.
 2. **Detection.** The `inotify` monitor receives the `IN_MOVED_TO` event, which guarantees the file is fully written.
 3. **Deduplication.** Each URL is hashed and checked against the thread-safe cache. Previously downloaded URLs are skipped.
-4. **Pre-allocation.** The engine issues an HTTP `HEAD` request to determine the file size, then reserves disk space with `fallocate()`. The return value is checked, and a fallback is used if the filesystem does not support the call.
-5. **Parallel download.** The engine checks for `Accept-Ranges: bytes`. If supported, the file is divided among `N` threads, each requesting its own range through `libcurl`. Otherwise, a single thread is used to avoid corruption.
+4. **Pre-allocation.** The engine issues an HTTP `HEAD` request to determine the file size, then reserves disk space with `fallocate()` using the `O_TRUNC` flag to ensure a clean slate.
+5. **Parallel download.** The engine divides the file among `N` threads, each requesting its own range through `libcurl`.
 6. **Direct-to-disk writes.** As data arrives, each thread calls `pwrite()` at its assigned offset in the pre-allocated file. This is lock-free and requires no merge step.
-7. **Finalization.** After all threads join, the completed file is atomically moved to `./per`, and the task JSON is moved to `./cmp`.
+7. **Finalization & Cleanup.** After all threads join successfully, the completed file is atomically moved to `./per`. The task JSON is moved to `./cmp`. If a task fails or contains bad JSON, it is safely removed or renamed to `.err` to keep the intake folder clean.
 
 ---
 
@@ -109,7 +110,7 @@ make
 
 ### Run
 
-No root privileges are required.
+No root privileges are required because the system now uses safe relative paths (`./new`, `./tmp`, etc.).
 
 ```bash
 ./download_service
@@ -163,7 +164,7 @@ cat ./cmp/dummy.json
 | --- | --- |
 | `inotify_init()`, `inotify_add_watch()` | Monitor filesystem events without polling. |
 | `IN_MOVED_TO` | Inotify mask that prevents reading half-written files. |
-| `open()`, `close()` | Low-level POSIX file descriptors. |
+| `open()` with `O_TRUNC` | Low-level POSIX file descriptors, guaranteeing a clean file allocation. |
 | `fallocate()` | Reserve disk blocks for a file without writing zeros. |
 | `pwrite()` | Write at a specific offset. Thread-safe because it does not use a shared file pointer. |
 | `std::filesystem::rename()` | Atomic move at the OS level. |
@@ -175,14 +176,15 @@ cat ./cmp/dummy.json
 | `curl_easy_setopt(..., CURLOPT_NOBODY, 1L)` | Perform an HTTP `HEAD` request to obtain the file size. |
 | `curl_easy_setopt(..., CURLOPT_RANGE, "x-y")` | Request a specific byte range. |
 | `curl_easy_setopt(..., CURLOPT_WRITEFUNCTION)` | Custom callback to intercept the incoming byte stream. |
+| `curl_easy_setopt(..., CURLOPT_NOSIGNAL, 1L)` | Critical safety flag to prevent DNS timeouts from throwing `SIGALRM`/`SIGPIPE` and crashing multithreaded processes. |
 
 ### Concurrency & Memory
 
 | Function | Purpose |
 | --- | --- |
-| `pthread_create()` | POSIX thread creation. |
+| `pthread_create()`, `pthread_cancel()`, `pthread_join()` | POSIX thread creation and safe lifecycle management to prevent memory leaks. |
 | `void*` and `static` | Bridge C++ class instances (singletons) to the C-style function pointers required by `pthread` and `libcurl` callbacks. |
-| `std::thread`, `detach()`, `join()` | Standard C++ threading. |
+| `std::thread`, `detach()`, `join()` | Standard C++ threading for task delegation. |
 | `std::mutex`, `std::lock_guard` | Guard access to the deduplication cache. |
 
 ### Utilities
@@ -190,4 +192,4 @@ cat ./cmp/dummy.json
 | Function / Library | Purpose |
 | --- | --- |
 | `uuid_generate()` | Generate unique identifiers to prevent filename collisions. |
-| `nlohmann/json` | JSON parsing. |
+| `nlohmann/json` | Fast and reliable JSON parsing, encapsulated in `try-catch` for safety. |

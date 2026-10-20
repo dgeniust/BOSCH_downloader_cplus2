@@ -5,7 +5,7 @@ import uuid
 import threading
 from flask import Flask, request, jsonify, render_template
 from flasgger import Swagger
-from bloomfilter import URLBloomFilter
+import atexit
 app = Flask(__name__)
 
 swagger = Swagger(app, template={
@@ -15,57 +15,57 @@ swagger = Swagger(app, template={
         "version": "1.0.0"
     }
 })
-NEW_FOLDER = 'new'
+NEW_FOLDER = './data/new'
 os.makedirs(NEW_FOLDER,exist_ok=True)
-BLOOM_FILE = 'bloom_filter.json'
 HISTORY_FILE = './data/download_history.json'
 HISTORY_LOCK = threading.Lock()
-# DATA_FILE = os.path.join(NEW_FOLDER,'url_data.json')
 JOBS={}
-FILE_LOCK = threading.Lock()
+JOB_EXPIRE_TIME = 3600
+
+url_history_set = set()
+history_dirty = False
 
 def init_history():
-    """Tạo file JSON history nếu chưa tồn tại"""
-    if not os.path.exists(HISTORY_FILE):
+    os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
+    if os.path.exists(HISTORY_FILE):
+      try:
+        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+          data = json.load(f)
+          url_history_set.update(data)
+      except Exception as e:
+         print(f"Lỗi đọc file history: {e}")
+    else:
       with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-        json.dump([], f)
+         json.dump([], f)
 
-bloom_filter = URLBloomFilter()
 init_history()
 
-# def process_urls_background(job_id, url_list):
-#     """Tiến trình ngầm: Check trùng lặp với lịch sử và tạo file uuid.json"""
-#     JOBS[job_id]['status'] = 'Processing'
-#     new_urls=[]
-#     with HISTORY_LOCK:
-#       try:
-#         with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-#           history_data = json.load(f)
-#       except (json.JSONDecodeError, FileNotFoundError):
-#           history_data = []
+def save_history():
+   global history_dirty
+   with HISTORY_LOCK:
+      if history_dirty:
+        temp_file = HISTORY_FILE + ".tmp"
+        with open(temp_file, 'w', encoding='utf-8') as f:
+           json.dump(list(url_history_set), f, indent=4)
+        os.replace(temp_file, HISTORY_FILE)
+        history_dirty = False
 
-#       history_set = set(history_data)
-#       for url in url_list: 
-#         if url not in history_set:
-#           new_urls.append(url)
-#           history_set.add(url)
-#           history_data.append(url)
+def background_maintenance():
+  while True:
+    time.sleep(60)
+    save_history()
 
-#       if new_urls:
-#          with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-#             json.dump(history_data, f, indent=4, ensure_ascii=False)
+    current_time = time.time()
+    expired_jobs = [
+      j_id for j_id, j_info in JOBS.items()
+      if current_time - j_info.get('create_at', current_time) > JOB_EXPIRE_TIME
+    ]
+    for j_id in expired_jobs:
+       JOBS.pop(j_id, None)
 
-#     if new_urls:
-#        job_file_path = os.path.join(NEW_FOLDER, f"{job_id}.json")
-#        with open (job_file_path, 'w', encoding='utf-8') as f:
-#           json.dump({"urls": new_urls}, f, indent=4, ensure_ascii=False)
-    
-#     JOBS[job_id]['status'] = 'Completed'
-#     JOBS[job_id]['result'] = {
-#         "received": len(url_list),
-#         "saved_to_json": len(new_urls),
-#         "saved_file": f"{job_id}.json" if new_urls else None
-#     } 
+threading.Thread(target=background_maintenance, daemon=True).start()
+
+atexit.register(save_history)
 
 def process_urls_background(job_id, url_list):
   JOBS[job_id]['status'] = 'Processing'
@@ -129,6 +129,7 @@ def process_list():
       400:
         description: Lỗi do danh sách URL trống
     """
+    global history_dirty
     data = request.get_json()
     url_list = data.get('urls', [])
     
@@ -136,14 +137,16 @@ def process_list():
         return jsonify({"success": False, "error": "Danh sách URL trống"}), 400
 
     new_urls = []
-    for url in url_list:
-      clean_url = url.strip().rstrip('/')
-      if clean_url and (clean_url not in bloom_filter):
-          new_urls.append(clean_url)
-          bloom_filter.add(clean_url)
-    if new_urls:
-      bloom_filter.save_to_file()
-    else:
+    with HISTORY_LOCK:
+      for url in url_list:
+        clean_url = url.strip().rstrip('/')
+        if clean_url and (clean_url not in url_history_set):
+            new_urls.append(clean_url)
+            url_history_set.add(clean_url)
+      if new_urls:
+        history_dirty = True
+
+    if not new_urls:
       return jsonify({
           "success": True,
           "message": "Tất cả các URL gửi lên đều đã tồn tại trong hệ thống, không có file mới được tạo.",
@@ -152,10 +155,10 @@ def process_list():
     job_id = str(uuid.uuid4())
     JOBS[job_id] = {
         'status': 'Pending',
-        'total_urls': len(url_list)
+        'total_urls': len(url_list),
+        'created_at': time.time()
     }
-    thread = threading.Thread(target=process_urls_background, args=(job_id, url_list))
-    thread.start()
+    threading.Thread(target=process_urls_background, args=(job_id, new_urls)).start()
     
     return jsonify({
         "success": True, 
@@ -209,144 +212,6 @@ def get_job_status(job_id):
         "details": job.get('result',{})
     })
 
-@app.route('/api/benchmark', methods=['POST'])
-def benchmark():
-  """
-    So sánh hiệu năng giữa phương pháp truyền thống và Bloom Filter
-    ---
-    tags:
-      - Benchmark
-    consumes:
-      - application/json
-    produces:
-      - application/json
-    parameters:
-      - in: body
-        name: body
-        required: true
-        description: Danh sách URL dùng để chạy thử nghiệm benchmark
-        schema:
-          type: object
-          required:
-            - urls
-          properties:
-            urls:
-              type: array
-              items:
-                type: string
-              example: ["https://google.com", "https://github.com", "https://facebook.com"]
-    responses:
-      200:
-        description: Kết quả đo đạc hiệu năng minh bạch giữa 2 phương pháp
-        schema:
-          type: object
-          properties:
-            input_urls_count:
-              type: integer
-              example: 3
-            traditional_method:
-              type: object
-              properties:
-                time_taken_ms:
-                  type: number
-                  example: 12.45
-                new_urls_found:
-                  type: integer
-                  example: 3
-                file_size_bytes:
-                  type: integer
-                  example: 1540
-                file_size_formatted:
-                  type: string
-                  example: "1.50 KB"
-            bloom_filter_method:
-              type: object
-              properties:
-                time_taken_ms:
-                  type: number
-                  example: 0.85
-                new_urls_found:
-                  type: integer
-                  example: 3
-                file_size_bytes:
-                  type: integer
-                  example: 1798120
-                file_size_formatted:
-                  type: string
-                  example: "1755.98 KB"
-            speedup_factor:
-              type: string
-              example: "14.65x nhanh hơn"
-      400:
-        description: Lỗi do danh sách URL trống hoặc thiếu thông tin truyền vào
-        schema:
-          type: object
-          properties:
-            error:
-              type: string
-              example: "Vui lòng cung cấp danh sách 'urls' trong body"
-  """
-  """
-  Chạy song song 2 phương pháp trên cùng 1 mảng URL đầu vào để đo đạc chỉ số minh bạch
-  """
-  data = request.get_json()
-  url_list = data.get('urls', [])
-  if not url_list:
-      return jsonify({"error": "Vui lòng cung cấp danh sách 'urls' trong body"}), 400
-
-  # --- ĐO CÁCH TRUYỀN THỐNG (download_history.json) ---
-  start_trad = time.perf_counter()
-  with HISTORY_LOCK:
-      try:
-          with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-              history_data = json.load(f)
-      except Exception:
-          history_data = []
-
-      history_set = set(history_data)
-      trad_new_urls = []
-      for url in url_list:
-          if url not in history_set:
-              trad_new_urls.append(url)
-              history_set.add(url)
-              history_data.append(url)
-
-      with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-          json.dump(history_data, f, indent=4, ensure_ascii=False)
-          
-  time_trad_ms = round((time.perf_counter() - start_trad) * 1000, 3)
-
-  # --- ĐO CÁCH BLOOM FILTER (bloom_filter.json) ---
-  start_bloom = time.perf_counter()
-  bloom_new_urls = []
-  for url in url_list:
-      if url not in bloom_filter:
-          bloom_new_urls.append(url)
-          bloom_filter.add(url)
-          
-  bloom_filter.save_to_file()
-  time_bloom_ms = round((time.perf_counter() - start_bloom) * 1000, 3)
-
-  # --- ĐO DUNG LƯỢNG FILE LƯU TRỮ ---
-  history_size = os.path.getsize(HISTORY_FILE) if os.path.exists(HISTORY_FILE) else 0
-  bloom_size = os.path.getsize(BLOOM_FILE) if os.path.exists(BLOOM_FILE) else 0
-
-  return jsonify({
-      "input_urls_count": len(url_list),
-      "traditional_method": {
-          "time_taken_ms": time_trad_ms,
-          "new_urls_found": len(trad_new_urls),
-          "file_size_bytes": history_size,
-          "file_size_formatted": f"{history_size / 1024:.2f} KB"
-      },
-      "bloom_filter_method": {
-          "time_taken_ms": time_bloom_ms,
-          "new_urls_found": len(bloom_new_urls),
-          "file_size_bytes": bloom_size,
-          "file_size_formatted": f"{bloom_size / 1024:.2f} KB"
-      },
-      "speedup_factor": f"{round(time_trad_ms / max(time_bloom_ms, 0.001), 2)}x nhanh hơn"
-  })
 
 if __name__ == '__main__':
     app.run(debug=True)

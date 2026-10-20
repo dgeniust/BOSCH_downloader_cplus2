@@ -148,6 +148,9 @@
             .then(data => {
                 if(data.success) {
                     showToast(`Thành công! Flask đã nhận link.`, "success");
+
+                    urlsArray = urlsArray.filter(item => !item.selected);
+                    renderList();
                 } else {
                     showToast("Lỗi: " + data.error, "error");
                 }
